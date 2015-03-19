@@ -143,12 +143,9 @@ class Slack extends Common {
 		$path = rtrim($path, '/');
 		$this->retrieveFiles();
 
-		if (empty($path) or !empty($this->dirList[$path])) {
-			\OCP\Util::writeLog('slackfiles', __FUNCTION__.' => '.$path.' (dir)', \OCP\Util::ERROR);
+		if (empty($path) or !empty($this->dirList[$path]))
 			return 'dir';
-		}
 
-		\OCP\Util::writeLog('slackfiles', __FUNCTION__.' => '.$path.' (file?)', \OCP\Util::ERROR);
 		return $this->findFile($path) ? 'file' : false;
 	}
 
