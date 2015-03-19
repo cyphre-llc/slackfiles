@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<info>
+	<id>slackfiles</id>
+	<name>Slack Files</name>
+	<description>Mount your files from Slack</description>
+	<licence>AGPL</licence>
+	<author>Ben Collins</author>
+	<requiremin>4.93</requiremin>
+	<types>
+		<filesystem/>
+	</types>
+</info>
