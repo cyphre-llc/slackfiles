@@ -11,7 +11,6 @@ class Slack extends Common {
 	private $team;
 	private $limit;
 	private $Slack;
-	private $id;
 
 	// Cached information about files
 	private $dirList;
@@ -45,7 +44,6 @@ class Slack extends Common {
 		$this->team = $config->getUserValue($user, 'slacknotify', 'team_id');
 		$this->disList = array();
 		$this->Slack = new \OCA\SlackNotify\SlackAPI($this->xoxp);
-		$this->id = 'slackfiles::' . $this->channel . '@' . $this->team . '/';
 
 		if (empty($this->xoxp) or empty($this->channel) or empty($this->team))
 			throw new \Exception('Must Authenticate with Slack');
@@ -61,7 +59,7 @@ class Slack extends Common {
 	}
 
 	public function getId() {
-		$this->id;
+		return 'slackfiles::' . $this->channel . '@' . $this->team;
 	}
 
 	// Forces a rescan of the files list
@@ -104,10 +102,10 @@ class Slack extends Common {
 			else
 				$this->dirList[$user]['count']++;
 
-			if (empty($this->dirList[$user]['mtime']))
-				$this->dirList[$user]['mtime'] = $mtime;
-			else if ($this->dirList[$user]['mtime'] < $mtime)
-				$this->dirList[$user]['mtime'] = $mtime;
+			if (empty($this->dirList[$user]['created']))
+				$this->dirList[$user]['created'] = $mtime;
+			else if ($this->dirList[$user]['created'] < $mtime)
+				$this->dirList[$user]['created'] = $mtime;
 		}
 	}
 
@@ -145,10 +143,13 @@ class Slack extends Common {
 		$path = rtrim($path, '/');
 		$this->retrieveFiles();
 
-		if (empty($path) or !empty($this->dirList[$path]))
+		if (empty($path) or !empty($this->dirList[$path])) {
+			\OCP\Util::writeLog('slackfiles', __FUNCTION__.' => '.$path.' (dir)', \OCP\Util::ERROR);
 			return 'dir';
+		}
 
-		return 'file';
+		\OCP\Util::writeLog('slackfiles', __FUNCTION__.' => '.$path.' (file?)', \OCP\Util::ERROR);
+		return $this->findFile($path) ? 'file' : false;
 	}
 
 	public function file_exists($path) {
@@ -259,12 +260,11 @@ class Slack extends Common {
 			$count = $time = 0;
 
 			foreach ($this->dirList as $user) {
-				$time = max($user['mtime'], $time);
+				$time = max($user['created'], $time);
 				$count++;
 			}
 			$stat['size'] = $count;
 			$stat['mtime'] = $stat['atime'] = $time;
-			$stat['mode'] = 0040555;
 		} else if (!empty($this->dirList[$path])) {
 			$count = $time = 0;
 
@@ -274,7 +274,6 @@ class Slack extends Common {
 			}
 			$stat['size'] = $count;
 			$stat['mtime'] = $stat['atime'] = $time;
-			$stat['mode'] = 0040555;
 		} else {
 			$item = $this->findFile($path);
 			if (!$item)
@@ -282,7 +281,6 @@ class Slack extends Common {
 
 			$stat['size'] = $item['size'];
 			$stat['mtime'] = $stat['atime'] = $item['created'];
-			$stat['mode'] = 0100444;
 		}
 		return $stat;
 	}
