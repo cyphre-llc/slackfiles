@@ -11,20 +11,30 @@ class Slack extends StreamWrapper {
 	private $team;
 	private $limit;
 	private $Slack;
+	private $justme = false;
 
 	// Cached information about files
-	private $dirList;
-	private static $userInfo;
+	private $dirList = array();
 
+	// More caching, but static so it's more useful
+	private static $userInfo = array();
 	private static $tempFiles = array();
 
 	public function disableEncryption() {
 		return true;
 	}
 
+	private function getSlackUser() {
+		return $this->getRealUsername($this->channel);
+	}
+
 	private function findFile($path) {
 		$path = rtrim($path, '/');
 		$this->retrieveFiles();
+
+		// If just us, prepend our username
+		if ($this->justme)
+			$path = $this->getSlackUser().'/'.$path;
 
 		if (empty($path) or !empty($this->dirList[$path]))
 			return false;
@@ -48,6 +58,7 @@ class Slack extends StreamWrapper {
 		$this->team = $config->getUserValue($user, 'slacknotify', 'team_id');
 		$this->disList = array();
 		$this->Slack = new \OCA\SlackNotify\SlackAPI($this->xoxp);
+		$this->justme = ($params['justme'] === 'true');
 
 		if (empty($this->xoxp) or empty($this->channel) or empty($this->team))
 			throw new \Exception('Must Authenticate with Slack');
@@ -118,23 +129,31 @@ class Slack extends StreamWrapper {
 		try {
 			$this->retrieveFiles();
 
-			if (!empty($path) and empty($this->dirList[$path]))
-				return false;
-
 			$dirStream = array();
 			$id = md5('slackdir:' . $path);
 
-			if (empty($path)) {
-				// Root directory
-				foreach ($this->dirList as $key => $item) {
-					$dirStream[] = $key;
-				}
-			} else {
-				// User subdir
-				foreach ($this->dirList[$path]['files'] as $file) {
+			if ($this->justme) {
+				if (!empty($path))
+					return false;
+
+				$user = $this->getSlackUser();
+				foreach ($this->dirList[$user]['files'] as $file)
 					$dirStream[] = $file['name'];
+			} else {
+				if (!empty($path) and empty($this->dirList[$path]))
+					return false;
+
+				if (empty($path)) {
+					// Root directory
+					foreach ($this->dirList as $key => $item)
+						$dirStream[] = $key;
+				} else {
+					// User subdir
+					foreach ($this->dirList[$path]['files'] as $file)
+						$dirStream[] = $file['name'];
 				}
 			}
+
 			\OC\Files\Stream\Dir::register($id, $dirStream);
 			return opendir('fakedir://' . $id);
 		} catch(\Exception $e) {
@@ -147,7 +166,10 @@ class Slack extends StreamWrapper {
 		$path = rtrim($path, '/');
 		$this->retrieveFiles();
 
-		if (empty($path) or !empty($this->dirList[$path]))
+		if (empty($path))
+			return 'dir';
+
+		if (!$this->justme and !empty($this->dirList[$path]))
 			return 'dir';
 
 		return $this->findFile($path) ? 'file' : false;
@@ -157,7 +179,10 @@ class Slack extends StreamWrapper {
 		$path = rtrim($path, '/');
 		$this->retrieveFiles();
 
-		if (empty($path) or !empty($this->dirList[$path]))
+		if (empty($path))
+			return true;
+
+		if (!$this->justme and !empty($this->dirList[$path]))
 			return true;
 
 		return $this->findFile($path) ? true : false;
@@ -228,10 +253,13 @@ class Slack extends StreamWrapper {
         }
 
 	public function uploadFile($path, $target) {
+		if ($this->justme)
+			$target = $this->getSlackUser().'/'.$target;
+
 		list($dir, $filename) = explode('/', $target, 2);
 
 		// Only upload to our own directory, to avoid confusion
-		if ($dir !== self::$userInfo[$this->channel])
+		if ($dir !== $this->getSlackUser())
 			return false;
 
 		$cfile = new \CURLFile($path);
@@ -258,7 +286,31 @@ class Slack extends StreamWrapper {
 		$this->retrieveFiles();
 
 		$stat = array();
-		if (empty($path)) {
+
+		if ($this->justme) {
+			// For this, it's just one directory
+			$user = $this->getSlackUser();
+
+			if (empty($path)) {
+				$count = $time = 0;
+
+				foreach ($this->dirList[$user]['files'] as $file) {
+					$time = max($file['created'], $time);
+					$count++;
+				}
+				$stat['size'] = $count;
+				$stat['mtime'] = $stat['atime'] = $time;
+			} else {
+				$count = $time = 0;
+
+				$item = $this->findFile($path);
+				if (!$item)
+					return false;
+
+				$stat['size'] = $item['size'];
+				$stat['mtime'] = $stat['atime'] = $item['created'];
+			}
+		} else if (empty($path)) {
 			// Get the newest time out of all the entries
 			$count = $time = 0;
 
@@ -303,7 +355,10 @@ class Slack extends StreamWrapper {
 		$path = rtrim($path, '/');
 		$this->retrieveFiles();
 
-		if (empty($path) or !empty($this->dirList[$path]))
+		if (empty($path))
+			return 'httpd/unix-directory';
+
+		if (!$this->justme and !empty($this->dirList[$path]))
                         return 'httpd/unix-directory';
 
 		$item = $this->findFile($path);

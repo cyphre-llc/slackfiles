@@ -12,6 +12,6 @@ if (\OCP\App::isEnabled('files_external')) {
 	OC_Mount_Config::registerBackend('\OC\Files\Storage\Slack', array(
 		'backend' => 'Slack Files',
 		'priority' => 100,
-		'configuration' => array( 'test' => (string)$l->t('Test')),
+		'configuration' => array( 'justme' => '!'.$l->t('Only my files')),
 		'has_dependencies' => true));
 }
