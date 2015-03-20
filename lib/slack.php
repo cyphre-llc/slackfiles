@@ -5,7 +5,7 @@
  */
 namespace OC\Files\Storage;
 
-class Slack extends Common {
+class Slack extends StreamWrapper {
 	private $xoxp;
 	private $channel;
 	private $team;
@@ -17,6 +17,10 @@ class Slack extends Common {
 	private static $userInfo;
 
 	private static $tempFiles = array();
+
+	public function disableEncryption() {
+		return true;
+	}
 
 	private function findFile($path) {
 		$path = rtrim($path, '/');
@@ -199,9 +203,6 @@ class Slack extends Common {
 			case 'x+':
 			case 'c':
 			case 'c+':
-				// XXX For now, just don't do this
-				return false;
-
 				//emulate these
 				$tmpFile = \OC_Helper::tmpFile();
 				\OC\Files\Stream\Close::registerCallback($tmpFile, array($this, 'writeBack'));
@@ -227,14 +228,17 @@ class Slack extends Common {
         }
 
 	public function uploadFile($path, $target) {
-		// XXX Disabled for now because of files_encryption
-		return false;
+		list($dir, $filename) = explode('/', $target, 2);
+
+		// Only upload to our own directory, to avoid confusion
+		if ($dir !== self::$userInfo[$this->channel])
+			return false;
 
 		$cfile = new \CURLFile($path);
-		$cfile->setPostFilename($target);
+		$cfile->setPostFilename($filename);
 
 		$ret = $this->Slack->call('files.upload', array(
-				'filename' => $target,
+				'filename' => $filename,
 				'file' => $cfile,
 			), 86400);
 
@@ -243,7 +247,9 @@ class Slack extends Common {
 			return false;
 		}
 
-		$this->dirList[$path] = $ret['file'];
+		// Update this file info
+		$this->dirList[$dir]['files'][$filename] = $ret['file'];
+
 		return true;
 	}
 
@@ -287,13 +293,13 @@ class Slack extends Common {
 	 */
 	public function constructUrl($path) {
 		$item = $this->findFile($path);
-		if (!empty($item['url_download']))
-			return $item['url_download'];
-		else
-			return $item['url'];
+		if (empty($item))
+			return false;
+
+		return $item['url'];
 	}
 
-	public function getMimeType_unused($path) {
+	public function getMimeType($path) {
 		$path = rtrim($path, '/');
 		$this->retrieveFiles();
 
@@ -318,6 +324,8 @@ class Slack extends Common {
 	public function mkdir($path)			{ return false; }
 	public function rmdir($path)			{ return false; }
 	public function touch($path, $mtime = NULL)	{ return false; }
+
+	// TODO Implement copy and use copy+unlink for rename
 	public function rename($path1, $path2)		{ return false; }
 	public function copy($path1, $path2)		{ return false; }
 }
