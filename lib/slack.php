@@ -74,7 +74,12 @@ class Slack extends StreamWrapper {
 	}
 
 	public function getId() {
-		return 'slackfiles::' . $this->channel . '@' . $this->team;
+		$id = 'slackfiles::' . $this->channel . '@' . $this->team;
+
+		if ($this->justme)
+			$id .= '/justme';
+
+		return $id;
 	}
 
 	// Forces a rescan of the files list
