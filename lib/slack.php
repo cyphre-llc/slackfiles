@@ -110,6 +110,9 @@ class Slack extends StreamWrapper {
 		}
 
 		foreach ($ret['files'] as $item) {
+			if (!empty($item['is_external']) and $item['is_external'])
+				continue;
+
 			$name = $item['name'];
 			$mtime = $item['created'];
 
