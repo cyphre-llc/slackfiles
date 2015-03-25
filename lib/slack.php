@@ -110,7 +110,7 @@ class Slack extends StreamWrapper {
 		}
 
 		foreach ($ret['files'] as $item) {
-			if (!empty($item['is_external']) and $item['is_external'])
+			if ($item['mode'] !== 'hosted')
 				continue;
 
 			$name = $item['name'];
